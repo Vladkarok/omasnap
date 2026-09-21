@@ -33,6 +33,7 @@
 #include <QtTypes>
 #include <QtCore/qtenvironmentvariables.h>
 #include <QtTest/qtestkeyboard.h>
+#include <QtTest/qtestmouse.h>
 
 #include <memory>
 
@@ -433,5 +434,39 @@ bool runSaveAsSmoke(QString &error) {
       return false;
     }
   }
+
+  // Hovering Save reveals a Save As button beneath it; clicking opens the
+  // chooser like Ctrl+Shift+S.
+  {
+    CaptureEditor editor(capture, CaptureEditor::CaptureMode::File);
+    editor.resize(1200, 800);
+    editor.show();
+    QCoreApplication::processEvents();
+    const QPoint save = editor.toolbarButtonCenterForTest(QStringLiteral("save"));
+    QTest::mouseMove(&editor, save);
+    QRectF saveAsButton;
+    for (const auto &button : editor.toolbarButtons(nullptr, true))
+      if (button.action == QStringLiteral("save-as"))
+        saveAsButton = button.rect;
+    if (!editor.saveMenuOpenForTest() || saveAsButton.isEmpty() ||
+        saveAsButton.top() <= save.y()) {
+      error = QStringLiteral("Hovering Save did not reveal Save As below it");
+      return false;
+    }
+    QTest::mouseMove(&editor, saveAsButton.center().toPoint());
+    QTest::mouseClick(&editor, Qt::LeftButton, Qt::NoModifier,
+                      saveAsButton.center().toPoint());
+    if (!waitUntil([] { return saveDialog() != nullptr; })) {
+      error = QStringLiteral("Save As menu button did not open the chooser");
+      return false;
+    }
+    saveDialog()->reject();
+    if (!waitUntil([&] { return !editor.busy_ && saveDialog() == nullptr; })) {
+      error = QStringLiteral("Save As menu chooser did not close cleanly");
+      return false;
+    }
+    editor.close();
+  }
+
   return true;
 }
