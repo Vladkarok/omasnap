@@ -287,6 +287,21 @@ void drawToolbarIcon(QPainter &painter, const QRectF &bounds,
       for (const qreal y : {6.0, 12.0, 18.0})
         painter.drawEllipse(QPointF(x, y), 1.7, 1.7);
     }
+  } else if (action == QStringLiteral("save-as")) {
+    // Save's arrow and tray, shifted left, with an ellipsis: "choose where".
+    painter.drawLine(QPointF(9, 4), QPointF(9, 15));
+    painter.drawLine(QPointF(5, 11), QPointF(9, 15));
+    painter.drawLine(QPointF(9, 15), QPointF(13, 11));
+    QPainterPath tray;
+    tray.moveTo(3, 18);
+    tray.lineTo(3, 20);
+    tray.lineTo(15, 20);
+    tray.lineTo(15, 18);
+    painter.drawPath(tray);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(color);
+    for (const qreal y : {8.0, 13.0, 18.0})
+      painter.drawEllipse(QPointF(20, y), 1.5, 1.5);
   } else if (action == QStringLiteral("save")) {
     painter.drawLine(QPointF(12, 4), QPointF(12, 15));
     painter.drawLine(QPointF(8, 11), QPointF(12, 15));
