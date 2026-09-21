@@ -70,6 +70,8 @@ class ChromeThemeWatcher final : public QObject {
 public:
   explicit ChromeThemeWatcher(const QString &directory,
                               QObject *parent = nullptr);
+  /// Joins an in-flight theme read so it cannot outlive the process statics.
+  ~ChromeThemeWatcher() override { loader_.waitForFinished(); }
   [[nodiscard]] const ChromeTheme &theme() const { return theme_; }
 
 signals:
