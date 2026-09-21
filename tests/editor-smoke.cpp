@@ -12620,6 +12620,9 @@ int main(int argc, char **argv) {
   if (!heldLockPath.isEmpty())
     return runInstanceLockHolder(heldLockPath);
 
+  // Never read the developer's own omasnap.conf (autosave, output folder).
+  QTemporaryDir isolatedConfig;
+  qputenv("XDG_CONFIG_HOME", isolatedConfig.path().toUtf8());
   QApplication application(argc, argv);
   QCommandLineParser parser;
   parser.setApplicationDescription(QStringLiteral("Omasnap headless smoke checks"));
