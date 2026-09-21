@@ -2074,6 +2074,11 @@ QRectF CaptureEditor::shapeMenuRect() const {
   return {anchor.center().x() - 58, anchor.bottom() + 4, 116, 36};
 }
 
+QRectF CaptureEditor::saveMenuRect() const {
+  const QRectF anchor = toolbarButtonRect(QStringLiteral("save"));
+  return {anchor.center().x() - 20, anchor.bottom() + 4, 40, 36};
+}
+
 QRectF CaptureEditor::textSizePanelRect() const {
   const QRectF anchor = toolbarButtonRect(QStringLiteral("tool-text"));
   return {anchor.center().x() - 51, anchor.bottom() + 6, 102, 34};
@@ -2287,6 +2292,7 @@ bool CaptureEditor::canStartAnnotationAt(const QPointF &position) const {
   if ((colorPaletteOpen_ && colorPaletteRect().contains(position)) ||
       (customColorPickerOpen_ && customColorPanelRect().contains(position)) ||
       (shapeMenuOpen_ && shapeMenuRect().contains(position)) ||
+      (saveMenuOpen_ && saveMenuRect().contains(position)) ||
       (textSizeMenuOpen_ && textSizePanelRect().contains(position)))
     return false;
   if (requiresSourcePixels(tool_))
@@ -2782,6 +2788,12 @@ CaptureEditor::toolbarButtons(QVector<qreal> *groupDividers,
                        QStringLiteral("shape-fill"),
                        fillShapes_ ? QStringLiteral("filled") : QString(),
                        QStringLiteral("Toggle filled or outlined shapes"), {}});
+  }
+  if (includeSubmenus && saveMenuOpen_) {
+    const QRectF menu = saveMenuRect();
+    buttons.push_back({{menu.left() + 4, menu.top() + 4, 32, 28},
+                       QStringLiteral("save-as"), {},
+                       QStringLiteral("Save as… · Ctrl+Shift+S"), {}});
   }
   if (includeSubmenus && colorPaletteOpen_) {
     const QRectF palette = colorPaletteRect();
@@ -4432,6 +4444,10 @@ void CaptureEditor::handleToolbar(const QString &action) {
     finish(OutputMode::Both);
   else if (action == QStringLiteral("save"))
     finish(OutputMode::Save);
+  else if (action == QStringLiteral("save-as")) {
+    saveMenuOpen_ = false;
+    saveAs();
+  }
   else if (action == QStringLiteral("close"))
     handleEscape();
   if (tool_ != toolBefore && status_ == statusBefore)
@@ -5645,6 +5661,7 @@ void CaptureEditor::mouseMoveEvent(QMouseEvent *event) {
     bool overPaletteAnchor = false;
     bool overCustomAnchor = false;
     bool overShapeAnchor = false;
+    bool overSaveAnchor = false;
     bool overTextAnchor = false;
     for (const ToolbarButton &button : toolbarButtons()) {
       if (button.action == QStringLiteral("palette") &&
@@ -5660,6 +5677,10 @@ void CaptureEditor::mouseMoveEvent(QMouseEvent *event) {
                  button.rect.contains(cursor_)) {
         overShapeAnchor = true;
         shapeIntentOrigin_ = cursor_;
+      } else if (button.action == QStringLiteral("save") &&
+                 button.rect.contains(cursor_)) {
+        overSaveAnchor = true;
+        saveIntentOrigin_ = cursor_;
       } else if (button.action == QStringLiteral("tool-text") &&
                  button.rect.contains(cursor_)) {
         overTextAnchor = true;
@@ -5686,6 +5707,13 @@ void CaptureEditor::mouseMoveEvent(QMouseEvent *event) {
     shapeMenuOpen_ = overShapeAnchor || overShapes || approachingShapes;
     if (!shapeMenuOpen_)
       shapeIntentOrigin_ = {};
+    const bool overSaveMenu = saveMenuOpen_ && saveMenuRect().contains(cursor_);
+    const bool approachingSaveMenu =
+        saveMenuOpen_ &&
+        inDownwardSubmenuTriangle(saveIntentOrigin_, saveMenuRect(), cursor_);
+    saveMenuOpen_ = overSaveAnchor || overSaveMenu || approachingSaveMenu;
+    if (!saveMenuOpen_)
+      saveIntentOrigin_ = {};
     const bool overTextSizes =
         textSizeMenuOpen_ && textSizePanelRect().contains(cursor_);
     const bool approachingTextSizes =
@@ -6648,7 +6676,8 @@ void CaptureEditor::updatePointerCursor() {
   }
   if ((colorPaletteOpen_ && colorPaletteRect().contains(cursor_)) ||
       (customColorPickerOpen_ && customColorPanelRect().contains(cursor_)) ||
-      (shapeMenuOpen_ && shapeMenuRect().contains(cursor_))) {
+      (shapeMenuOpen_ && shapeMenuRect().contains(cursor_)) ||
+      (saveMenuOpen_ && saveMenuRect().contains(cursor_))) {
     clearHighlighterPreview();
     applyCursor(Qt::PointingHandCursor);
     return;
@@ -6949,6 +6978,7 @@ void CaptureEditor::returnToSelect() {
   colorPaletteOpen_ = false;
   customColorPickerOpen_ = false;
   shapeMenuOpen_ = false;
+  saveMenuOpen_ = false;
   textSizeMenuOpen_ = false;
   dismissOcrOverlay();
   // Everything edited derives from the op log; an empty log is the untouched
@@ -7775,6 +7805,11 @@ void CaptureEditor::paintEdit(QPainter &painter) {
     painter.setPen(QPen(chromeTheme().panelBorder.brush(shapeMenuRect()), 1));
     painter.setBrush(chromeTheme().surface);
     painter.drawRoundedRect(shapeMenuRect(), 9, 9);
+  }
+  if (saveMenuOpen_) {
+    painter.setPen(QPen(chromeTheme().panelBorder.brush(saveMenuRect()), 1));
+    painter.setBrush(chromeTheme().surface);
+    painter.drawRoundedRect(saveMenuRect(), 9, 9);
   }
   if (colorPaletteOpen_) {
     painter.setPen(QPen(chromeTheme().panelBorder.brush(colorPaletteRect()), 1));
