@@ -269,16 +269,6 @@ bool inDownwardSubmenuTriangle(const QPointF &origin, const QRectF &submenu,
            << submenu.bottomRight() + QPointF(8, 6);
   return triangle.containsPoint(pointer, Qt::OddEvenFill);
 }
-bool inUpwardSubmenuTriangle(const QPointF &origin, const QRectF &submenu,
-                             const QPointF &pointer) {
-  if (origin.isNull() || pointer.y() > origin.y() ||
-      pointer.y() < submenu.top() - 6.0)
-    return false;
-  QPolygonF triangle;
-  triangle << origin << submenu.topLeft() + QPointF(-8, -6)
-           << submenu.topRight() + QPointF(8, -6);
-  return triangle.containsPoint(pointer, Qt::OddEvenFill);
-}
 /// Arrow presses closer together than this share one undo entry, so a held
 /// key reads as one move.
 constexpr qint64 kNudgeCoalesceMs = 100;
@@ -2066,15 +2056,6 @@ QRectF CaptureEditor::shapeMenuRect() const {
   return {anchor.center().x() - 58, anchor.bottom() + 4, 116, 36};
 }
 
-QRectF CaptureEditor::saveMenuRect() const {
-  // Open on the side the Save tooltip is not: instant tooltips sit above a
-  // button unless the screen edge pushes them below (the overlay toolbar).
-  const QRectF anchor = toolbarButtonRect(QStringLiteral("save"));
-  const bool tooltipBelow = anchor.top() - 28 - 7 < 6;
-  return tooltipBelow ? QRectF(anchor.center().x() - 20, anchor.top() - 35, 40, 32)
-                      : QRectF(anchor.center().x() - 20, anchor.bottom() + 4, 40, 36);
-}
-
 QRectF CaptureEditor::textSizePanelRect() const {
   const QRectF anchor = toolbarButtonRect(QStringLiteral("tool-text"));
   return {anchor.center().x() - 51, anchor.bottom() + 6, 102, 34};
@@ -2288,7 +2269,7 @@ bool CaptureEditor::canStartAnnotationAt(const QPointF &position) const {
   if ((colorPaletteOpen_ && colorPaletteRect().contains(position)) ||
       (customColorPickerOpen_ && customColorPanelRect().contains(position)) ||
       (shapeMenuOpen_ && shapeMenuRect().contains(position)) ||
-      (saveMenuOpen_ && saveMenuRect().contains(position)) ||
+      toolbarButtonRect(QStringLiteral("save-as")).contains(position) ||
       (textSizeMenuOpen_ && textSizePanelRect().contains(position)))
     return false;
   if (requiresSourcePixels(tool_))
@@ -2770,7 +2751,15 @@ CaptureEditor::toolbarButtons(QVector<qreal> *groupDividers,
   add(36, QStringLiteral("copy"), {}, QStringLiteral("Copy only · Ctrl+C"));
   add(40, QStringLiteral("both"), {}, QStringLiteral("Copy and save · Enter"));
   add(36, QStringLiteral("save"), {}, QStringLiteral("Save only · Ctrl+S"));
+  const QRectF save = buttons.back().rect;
   add(36, QStringLiteral("close"), {}, QStringLiteral("Close · Esc"));
+  // Save As stacks on Save, outside the row, so the toolbar keeps its width.
+  // It takes the side the tooltips leave free: above the overlay toolbar
+  // (its tooltips drop below), below the windowed one (legend card above).
+  const qreal stack = save.height() + gap;
+  buttons.push_back({save.translated(0, windowedPresentation_ ? stack : -stack),
+                     QStringLiteral("save-as"), {},
+                     QStringLiteral("Save as… · Ctrl+Shift+S"), {}});
 
   if (includeSubmenus && shapeMenuOpen_) {
     const QRectF menu = shapeMenuRect();
@@ -2784,12 +2773,6 @@ CaptureEditor::toolbarButtons(QVector<qreal> *groupDividers,
                        QStringLiteral("shape-fill"),
                        fillShapes_ ? QStringLiteral("filled") : QString(),
                        QStringLiteral("Toggle filled or outlined shapes"), {}});
-  }
-  if (includeSubmenus && saveMenuOpen_) {
-    const QRectF menu = saveMenuRect();
-    buttons.push_back({{menu.left() + 4, menu.center().y() - 14, 32, 28},
-                       QStringLiteral("save-as"), {},
-                       QStringLiteral("Save as… · Ctrl+Shift+S"), {}});
   }
   if (includeSubmenus && colorPaletteOpen_) {
     const QRectF palette = colorPaletteRect();
@@ -4440,10 +4423,8 @@ void CaptureEditor::handleToolbar(const QString &action) {
     finish(OutputMode::Both);
   else if (action == QStringLiteral("save"))
     finish(OutputMode::Save);
-  else if (action == QStringLiteral("save-as")) {
-    saveMenuOpen_ = false;
+  else if (action == QStringLiteral("save-as"))
     saveAs();
-  }
   else if (action == QStringLiteral("close"))
     handleEscape();
   if (tool_ != toolBefore && status_ == statusBefore)
@@ -5641,7 +5622,6 @@ void CaptureEditor::mouseMoveEvent(QMouseEvent *event) {
     bool overPaletteAnchor = false;
     bool overCustomAnchor = false;
     bool overShapeAnchor = false;
-    bool overSaveAnchor = false;
     bool overTextAnchor = false;
     for (const ToolbarButton &button : toolbarButtons()) {
       if (button.action == QStringLiteral("palette") &&
@@ -5657,10 +5637,6 @@ void CaptureEditor::mouseMoveEvent(QMouseEvent *event) {
                  button.rect.contains(cursor_)) {
         overShapeAnchor = true;
         shapeIntentOrigin_ = cursor_;
-      } else if (button.action == QStringLiteral("save") &&
-                 button.rect.contains(cursor_)) {
-        overSaveAnchor = true;
-        saveIntentOrigin_ = cursor_;
       } else if (button.action == QStringLiteral("tool-text") &&
                  button.rect.contains(cursor_)) {
         overTextAnchor = true;
@@ -5687,16 +5663,6 @@ void CaptureEditor::mouseMoveEvent(QMouseEvent *event) {
     shapeMenuOpen_ = overShapeAnchor || overShapes || approachingShapes;
     if (!shapeMenuOpen_)
       shapeIntentOrigin_ = {};
-    const bool overSaveMenu = saveMenuOpen_ && saveMenuRect().contains(cursor_);
-    const QRectF saveMenu = saveMenuRect();
-    const bool approachingSaveMenu =
-        saveMenuOpen_ &&
-        (saveMenu.bottom() < saveIntentOrigin_.y()
-             ? inUpwardSubmenuTriangle(saveIntentOrigin_, saveMenu, cursor_)
-             : inDownwardSubmenuTriangle(saveIntentOrigin_, saveMenu, cursor_));
-    saveMenuOpen_ = overSaveAnchor || overSaveMenu || approachingSaveMenu;
-    if (!saveMenuOpen_)
-      saveIntentOrigin_ = {};
     const bool overTextSizes =
         textSizeMenuOpen_ && textSizePanelRect().contains(cursor_);
     const bool approachingTextSizes =
@@ -6659,8 +6625,7 @@ void CaptureEditor::updatePointerCursor() {
   }
   if ((colorPaletteOpen_ && colorPaletteRect().contains(cursor_)) ||
       (customColorPickerOpen_ && customColorPanelRect().contains(cursor_)) ||
-      (shapeMenuOpen_ && shapeMenuRect().contains(cursor_)) ||
-      (saveMenuOpen_ && saveMenuRect().contains(cursor_))) {
+      (shapeMenuOpen_ && shapeMenuRect().contains(cursor_))) {
     clearHighlighterPreview();
     applyCursor(Qt::PointingHandCursor);
     return;
@@ -6961,7 +6926,6 @@ void CaptureEditor::returnToSelect() {
   colorPaletteOpen_ = false;
   customColorPickerOpen_ = false;
   shapeMenuOpen_ = false;
-  saveMenuOpen_ = false;
   textSizeMenuOpen_ = false;
   dismissOcrOverlay();
   // Everything edited derives from the op log; an empty log is the untouched
@@ -7784,11 +7748,6 @@ void CaptureEditor::paintEdit(QPainter &painter) {
     painter.setBrush(chromeTheme().surface);
     painter.drawRoundedRect(shapeMenuRect(), 9, 9);
   }
-  if (saveMenuOpen_) {
-    painter.setPen(QPen(chromeTheme().panelBorder.brush(saveMenuRect()), 1));
-    painter.setBrush(chromeTheme().surface);
-    painter.drawRoundedRect(saveMenuRect(), 9, 9);
-  }
   if (colorPaletteOpen_) {
     painter.setPen(QPen(chromeTheme().panelBorder.brush(colorPaletteRect()), 1));
     painter.setBrush(chromeTheme().surface);
@@ -8009,9 +7968,12 @@ void CaptureEditor::paintEdit(QPainter &painter) {
   // guide spreads as a card over the reserved band above the toolbar.
   if (windowedPresentation_) {
     QRectF legendAnchor;
-    for (const ToolbarButton &button : buttons)
+    for (const ToolbarButton &button : buttons) {
+      if (button.action == QStringLiteral("save-as"))
+        continue; // stacked off the row; the legend anchors to the row itself
       legendAnchor = legendAnchor.isNull() ? button.rect
                                            : legendAnchor.united(button.rect);
+    }
     drawAnchoredHotkeyLegend(painter, rect(), editorHotkeyEntries(),
                              legendAnchor);
   }

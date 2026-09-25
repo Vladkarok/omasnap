@@ -407,7 +407,6 @@ public:
     return customColorPickerOpen_;
   }
   [[nodiscard]] bool shapeMenuOpenForTest() const { return shapeMenuOpen_; }
-  [[nodiscard]] bool saveMenuOpenForTest() const { return saveMenuOpen_; }
   /// Whether window selection is active in the select phase. Test accessor.
   [[nodiscard]] bool windowModeForTest() const { return windowMode_; }
   /// Whether clicks are inferred as window/fullscreen while drags stay areas.
@@ -492,7 +491,6 @@ private:
   [[nodiscard]] QRectF colorPaletteRect() const;
   [[nodiscard]] QRectF customColorPanelRect() const;
   [[nodiscard]] QRectF shapeMenuRect() const;
-  [[nodiscard]] QRectF saveMenuRect() const;
   [[nodiscard]] QRectF textSizePanelRect() const;
   [[nodiscard]] QVector<QRectF> cropHandleRects() const;
   [[nodiscard]] int cropHandleAt(const QPointF &point) const;
@@ -856,12 +854,10 @@ private:
   bool colorPaletteOpen_ = false;
   bool customColorPickerOpen_ = false;
   bool shapeMenuOpen_ = false;
-  bool saveMenuOpen_ = false;
   bool textSizeMenuOpen_ = false;
   QPointF paletteIntentOrigin_;
   QPointF customColorIntentOrigin_;
   QPointF shapeIntentOrigin_;
-  QPointF saveIntentOrigin_;
   QPointF textSizeIntentOrigin_;
   bool usingCustomColor_ = false;
   int hoveredWindow_ = -1;
