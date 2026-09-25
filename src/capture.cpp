@@ -1841,6 +1841,33 @@ QString suggestedScreenshotPath(const QString &appSlug) {
   return suggestedScreenshotPathImpl(appSlug);
 }
 
+namespace {
+QString saveAsStateFile() {
+  const QString state =
+      QStandardPaths::writableLocation(QStandardPaths::StateLocation);
+  return state.isEmpty() ? QString()
+                         : QDir(state).filePath(QStringLiteral("save-as-dir"));
+}
+} // namespace
+
+QString loadSaveAsDirectory() {
+  QFile file(saveAsStateFile());
+  if (file.fileName().isEmpty() || !file.open(QIODevice::ReadOnly))
+    return {};
+  const QString directory = QString::fromUtf8(file.readAll()).trimmed();
+  return !directory.isEmpty() && QFileInfo(directory).isDir() ? directory
+                                                              : QString();
+}
+
+void storeSaveAsDirectory(const QString &directory) {
+  const QString path = saveAsStateFile();
+  if (path.isEmpty() || !QDir().mkpath(QFileInfo(path).absolutePath()))
+    return;
+  QSaveFile file(path);
+  if (file.open(QIODevice::WriteOnly) && file.write(directory.toUtf8()) >= 0)
+    static_cast<void>(file.commit());
+}
+
 QString moveSnapshotToScreenshots(const QString &sourcePath, QString &error,
                                   const QString &appSlug) {
   const QString targetPath = screenshotTargetPath(error, appSlug);

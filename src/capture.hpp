@@ -413,6 +413,12 @@ QImage applyRedactionsScaled(QImage image, const QVector<Annotation> &redactions
 /** Suggested PNG destination from output config, without creating files.
  * Reads config: call on a worker. */
 [[nodiscard]] QString suggestedScreenshotPath(const QString &appSlug = {});
+/** Last Save As folder, persisted across runs under the state directory.
+ * Empty when never saved or the folder no longer exists. Disk I/O: call on a
+ * worker. */
+[[nodiscard]] QString loadSaveAsDirectory();
+/** Remembers a Save As folder for the next run; best effort. Worker only. */
+void storeSaveAsDirectory(const QString &directory);
 /** Atomically saves flattened PNG pixels, preserving an existing file on
  * failure. PNG encoding and disk I/O must run on a worker. */
 [[nodiscard]] bool savePngFile(const QImage &image, const QString &path,

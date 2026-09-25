@@ -80,10 +80,13 @@ void CaptureEditor::saveAs() {
       showSaveAsDialog(suggested);
   });
   const bool wayland = QGuiApplication::platformName() == QStringLiteral("wayland");
-  watcher->setFuture(QtConcurrent::run([appSlug, directory = saveAsDirectory_, wayland] {
+  watcher->setFuture(QtConcurrent::run([appSlug, remembered = saveAsDirectory_, wayland] {
     if (wayland)
       prepareSaveAsWindow();
     const QString suggested = suggestedScreenshotPath(appSlug);
+    // Each capture is its own process: fall back to the folder from last run.
+    const QString directory =
+        remembered.isEmpty() ? loadSaveAsDirectory() : remembered;
     return directory.isEmpty()
                ? suggested
                : QDir(directory).filePath(QFileInfo(suggested).fileName());
@@ -202,6 +205,7 @@ void CaptureEditor::saveAsToPath(const QString &path) {
                                        background, shadow, boundary, backdrop);
     QString error;
     if (savePngFile(image, path, error)) {
+      storeSaveAsDirectory(QFileInfo(path).absolutePath());
       // Without --notify, the saved file keeps its timed preview.
       bool announced = true;
       if (notifySavedCaptures()) {
