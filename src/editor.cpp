@@ -286,6 +286,16 @@ bool inDownwardSubmenuTriangle(const QPointF &origin, const QRectF &submenu,
            << submenu.bottomRight() + QPointF(8, 6);
   return triangle.containsPoint(pointer, Qt::OddEvenFill);
 }
+bool inUpwardSubmenuTriangle(const QPointF &origin, const QRectF &submenu,
+                             const QPointF &pointer) {
+  if (origin.isNull() || pointer.y() > origin.y() ||
+      pointer.y() < submenu.top() - 6.0)
+    return false;
+  QPolygonF triangle;
+  triangle << origin << submenu.topLeft() + QPointF(-8, -6)
+           << submenu.topRight() + QPointF(8, -6);
+  return triangle.containsPoint(pointer, Qt::OddEvenFill);
+}
 /// Arrow presses closer together than this share one undo entry, so a held
 /// key reads as one move.
 constexpr qint64 kNudgeCoalesceMs = 100;
@@ -2075,8 +2085,12 @@ QRectF CaptureEditor::shapeMenuRect() const {
 }
 
 QRectF CaptureEditor::saveMenuRect() const {
+  // Open on the side the Save tooltip is not: instant tooltips sit above a
+  // button unless the screen edge pushes them below (the overlay toolbar).
   const QRectF anchor = toolbarButtonRect(QStringLiteral("save"));
-  return {anchor.center().x() - 20, anchor.bottom() + 4, 40, 36};
+  const bool tooltipBelow = anchor.top() - 28 - 7 < 6;
+  return tooltipBelow ? QRectF(anchor.center().x() - 20, anchor.top() - 35, 40, 32)
+                      : QRectF(anchor.center().x() - 20, anchor.bottom() + 4, 40, 36);
 }
 
 QRectF CaptureEditor::textSizePanelRect() const {
@@ -2791,7 +2805,7 @@ CaptureEditor::toolbarButtons(QVector<qreal> *groupDividers,
   }
   if (includeSubmenus && saveMenuOpen_) {
     const QRectF menu = saveMenuRect();
-    buttons.push_back({{menu.left() + 4, menu.top() + 4, 32, 28},
+    buttons.push_back({{menu.left() + 4, menu.center().y() - 14, 32, 28},
                        QStringLiteral("save-as"), {},
                        QStringLiteral("Save as… · Ctrl+Shift+S"), {}});
   }
@@ -5708,9 +5722,12 @@ void CaptureEditor::mouseMoveEvent(QMouseEvent *event) {
     if (!shapeMenuOpen_)
       shapeIntentOrigin_ = {};
     const bool overSaveMenu = saveMenuOpen_ && saveMenuRect().contains(cursor_);
+    const QRectF saveMenu = saveMenuRect();
     const bool approachingSaveMenu =
         saveMenuOpen_ &&
-        inDownwardSubmenuTriangle(saveIntentOrigin_, saveMenuRect(), cursor_);
+        (saveMenu.bottom() < saveIntentOrigin_.y()
+             ? inUpwardSubmenuTriangle(saveIntentOrigin_, saveMenu, cursor_)
+             : inDownwardSubmenuTriangle(saveIntentOrigin_, saveMenu, cursor_));
     saveMenuOpen_ = overSaveAnchor || overSaveMenu || approachingSaveMenu;
     if (!saveMenuOpen_)
       saveIntentOrigin_ = {};
