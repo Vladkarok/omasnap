@@ -441,23 +441,23 @@ bool runSaveAsSmoke(QString &error) {
     }
   }
 
-  // Hovering Save reveals a Save As button beneath it; clicking opens the
-  // chooser like Ctrl+Shift+S.
+  // Save As is a regular toolbar button stacked above Save (the overlay
+  // toolbar's tooltips drop below it); clicking opens the chooser like
+  // Ctrl+Shift+S.
   {
     CaptureEditor editor(capture, CaptureEditor::CaptureMode::File);
     editor.resize(1200, 800);
     editor.show();
     QCoreApplication::processEvents();
-    const QPoint save = editor.toolbarButtonCenterForTest(QStringLiteral("save"));
-    QTest::mouseMove(&editor, save);
+    const QRectF save = editor.toolbarButtonRectForTest(QStringLiteral("save"));
     QRectF saveAsButton;
-    for (const auto &button : editor.toolbarButtons(nullptr, true))
+    for (const auto &button : editor.toolbarButtons(nullptr, false))
       if (button.action == QStringLiteral("save-as"))
         saveAsButton = button.rect;
-    // The overlay toolbar's tooltips drop below it, so the menu opens above.
-    if (!editor.saveMenuOpenForTest() || saveAsButton.isEmpty() ||
-        saveAsButton.bottom() >= save.y() || saveAsButton.top() < 0) {
-      error = QStringLiteral("Hovering Save did not reveal Save As above it");
+    if (saveAsButton.size() != save.size() ||
+        saveAsButton.left() != save.left() ||
+        saveAsButton.bottom() >= save.top() || saveAsButton.top() < 0) {
+      error = QStringLiteral("Save As is not a Save-sized button above Save");
       return false;
     }
     QTest::mouseMove(&editor, saveAsButton.center().toPoint());
