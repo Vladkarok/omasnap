@@ -28,6 +28,7 @@
 #include <QLineEdit>
 #include <QTemporaryDir>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QThread>
 #include <Qt>
 #include <QtTypes>
@@ -58,6 +59,10 @@ QFileDialog *saveDialog() {
 } // namespace
 
 bool runSaveAsSmoke(QString &error) {
+  // The remembered folder lives in the state directory; keep the user's own.
+  QStandardPaths::setTestModeEnabled(true);
+  const auto restoreStandardPaths =
+      qScopeGuard([] { QStandardPaths::setTestModeEnabled(false); });
   const QTemporaryDir directory;
   if (!directory.isValid()) {
     error = QStringLiteral("Could not create Save As test directory");
@@ -211,7 +216,8 @@ bool runSaveAsSmoke(QString &error) {
     if (!waitUntil([&] { return !editor.busy_; }) || editor.isVisible() ||
         editor.textEditing() || QImage(output).convertToFormat(QImage::Format_ARGB32) !=
             editor.renderCurrentOutput().convertToFormat(QImage::Format_ARGB32) ||
-        editor.saveAsDirectory_ != directory.path()) {
+        editor.saveAsDirectory_ != directory.path() ||
+        loadSaveAsDirectory() != directory.path()) {
       error = QStringLiteral("Save As did not export the draft and close: "
                              "visible=%1 draft=%2 busy=%3 output=%4x%5 directory=%6 status=%7")
                   .arg(editor.isVisible()).arg(editor.textEditing()).arg(editor.busy_)
