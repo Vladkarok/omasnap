@@ -454,9 +454,10 @@ bool runSaveAsSmoke(QString &error) {
     for (const auto &button : editor.toolbarButtons(nullptr, true))
       if (button.action == QStringLiteral("save-as"))
         saveAsButton = button.rect;
+    // The overlay toolbar's tooltips drop below it, so the menu opens above.
     if (!editor.saveMenuOpenForTest() || saveAsButton.isEmpty() ||
-        saveAsButton.top() <= save.y()) {
-      error = QStringLiteral("Hovering Save did not reveal Save As below it");
+        saveAsButton.bottom() >= save.y() || saveAsButton.top() < 0) {
+      error = QStringLiteral("Hovering Save did not reveal Save As above it");
       return false;
     }
     QTest::mouseMove(&editor, saveAsButton.center().toPoint());
