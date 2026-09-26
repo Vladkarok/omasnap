@@ -23,29 +23,6 @@
 #include <QtLogging>
 #include <QtConcurrent/QtConcurrentRun>
 
-namespace {
-void prepareSaveAsWindow() {
-  // The overlay has no xdg-shell parent for its chooser. Without a rule,
-  // Hyprland tiles the independent dialog and rearranges the user's windows.
-  // Register before mapping, on the same worker that prepares the filename.
-  QProcess process;
-  process.start(QStringLiteral("hyprctl"),
-                {QStringLiteral("eval"),
-                 QStringLiteral("hl.window_rule({ name = \"omasnap-save-as\", "
-                                "match = { class = \"^omasnap$\", "
-                                "title = \"^Save screenshot as$\" }, "
-                                "float = true, center = true, opacity = 1 })")});
-  if (!process.waitForFinished(500)) {
-    process.kill();
-    process.waitForFinished(500);
-    qWarning("Could not configure the floating Save As window");
-  } else if (process.exitStatus() != QProcess::NormalExit ||
-             process.exitCode() != 0 ||
-             process.readAllStandardOutput().contains("error")) {
-    qWarning("Could not configure the floating Save As window");
-  }
-}
-} // namespace
 
 void CaptureEditor::cancelSaveAs() {
   // QObject stays alive after close(), and destruction can drain queued events.
@@ -82,7 +59,7 @@ void CaptureEditor::saveAs() {
   const bool wayland = QGuiApplication::platformName() == QStringLiteral("wayland");
   watcher->setFuture(QtConcurrent::run([appSlug, remembered = saveAsDirectory_, wayland] {
     if (wayland)
-      prepareSaveAsWindow();
+      registerSaveAsWindowRule();
     const QString suggested = suggestedScreenshotPath(appSlug);
     // Each capture is its own process: fall back to the folder from last run.
     const QString directory =
