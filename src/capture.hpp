@@ -417,6 +417,9 @@ QImage applyRedactionsScaled(QImage image, const QVector<Annotation> &redactions
  * Empty when never saved or the folder no longer exists. Disk I/O: call on a
  * worker. */
 [[nodiscard]] QString loadSaveAsDirectory();
+/** Floats and centers "Save screenshot as" choosers under Hyprland. Blocks
+ * on hyprctl: call on a worker before the chooser maps. */
+void registerSaveAsWindowRule();
 /** Remembers a Save As folder for the next run; best effort. Worker only. */
 void storeSaveAsDirectory(const QString &directory);
 /** Atomically saves flattened PNG pixels, preserving an existing file on

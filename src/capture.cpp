@@ -1850,6 +1850,28 @@ QString saveAsStateFile() {
 }
 } // namespace
 
+void registerSaveAsWindowRule() {
+  // The overlay has no xdg-shell parent for its chooser. Without a rule,
+  // Hyprland tiles the independent dialog and rearranges the user's windows.
+  // Register before mapping, on the same worker that prepares the filename.
+  QProcess process;
+  process.start(QStringLiteral("hyprctl"),
+                {QStringLiteral("eval"),
+                 QStringLiteral("hl.window_rule({ name = \"omasnap-save-as\", "
+                                "match = { class = \"^omasnap$\", "
+                                "title = \"^Save screenshot as$\" }, "
+                                "float = true, center = true, opacity = 1 })")});
+  if (!process.waitForFinished(500)) {
+    process.kill();
+    process.waitForFinished(500);
+    qWarning("Could not configure the floating Save As window");
+  } else if (process.exitStatus() != QProcess::NormalExit ||
+             process.exitCode() != 0 ||
+             process.readAllStandardOutput().contains("error")) {
+    qWarning("Could not configure the floating Save As window");
+  }
+}
+
 QString loadSaveAsDirectory() {
   QFile file(saveAsStateFile());
   if (file.fileName().isEmpty() || !file.open(QIODevice::ReadOnly))

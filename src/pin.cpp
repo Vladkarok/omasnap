@@ -21,7 +21,9 @@
 #include <QDir>
 #include <QDrag>
 #include <QFile>
+#include <QFileDialog>
 #include <QFileInfo>
+#include <QPointer>
 #include <QFileSystemWatcher>
 #include <QEnterEvent>
 #include <QElapsedTimer>
@@ -891,6 +893,7 @@ protected:
     drawControlButton(painter, pinButtonRect(), QStringLiteral("pin"));
     drawControlButton(painter, pathButtonRect(), QStringLiteral("path"));
     drawControlButton(painter, revealButtonRect(), QStringLiteral("folder"));
+    drawControlButton(painter, saveAsButtonRect(), QStringLiteral("save-as"));
     drawControlButton(painter, copyButtonRect(), QStringLiteral("copy"),
                        QStringLiteral("Copy"));
     drawControlButton(painter, closeButtonRect(), QStringLiteral("close"));
@@ -960,6 +963,10 @@ protected:
       }
       if (revealButtonRect().contains(position)) {
         revealFile();
+        return;
+      }
+      if (saveAsButtonRect().contains(position)) {
+        saveAs();
         return;
       }
       if (editButtonRect().contains(position)) {
@@ -1312,6 +1319,81 @@ protected:
     }, {});
   }
 
+  /// Save a copy of the finished capture elsewhere, without editing it. The
+  /// chooser opens in the last Save As folder, named like the autosaved file.
+  void saveAs() {
+    if (actionPending_ || saveAsDialog_)
+      return;
+    actionPending_ = true;
+    updateExpiryPause();
+    auto *watcher = new QFutureWatcher<QString>(this);
+    connect(watcher, &QFutureWatcher<QString>::finished, this, [this, watcher] {
+      const QString suggested = watcher->result();
+      watcher->deleteLater();
+      actionPending_ = false;
+      showSaveAsDialog(suggested);
+    });
+    const bool wayland = QGuiApplication::platformName() == QStringLiteral("wayland");
+    watcher->setFuture(QtConcurrent::run([shared = sharedPath_, wayland] {
+      if (wayland)
+        registerSaveAsWindowRule();
+      const QFileInfo fallback(shared.isEmpty() ? suggestedScreenshotPath() : shared);
+      const QString remembered = loadSaveAsDirectory();
+      return QDir(remembered.isEmpty() ? fallback.absolutePath() : remembered)
+          .filePath(fallback.fileName());
+    }));
+  }
+
+  void showSaveAsDialog(const QString &suggested) {
+    auto *dialog = new QFileDialog(nullptr, QStringLiteral("Save screenshot as"),
+                                   suggested, QStringLiteral("PNG image (*.png)"));
+    saveAsDialog_ = dialog;
+    updateExpiryPause();
+    dialog->setObjectName(QStringLiteral("omasnap-save-as"));
+    dialog->setFont(chromeFont(13));
+    dialog->resize(760, 520);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setAttribute(Qt::WA_QuitOnClose, false);
+    dialog->setOption(QFileDialog::DontUseNativeDialog);
+    dialog->setAcceptMode(QFileDialog::AcceptSave);
+    dialog->setFileMode(QFileDialog::AnyFile);
+    dialog->setDefaultSuffix(QStringLiteral("png"));
+    connect(this, &QObject::destroyed, dialog, &QObject::deleteLater);
+    connect(dialog, &QDialog::finished, this, [this, dialog](int result) {
+      const QString target = result == QDialog::Accepted
+                                 ? dialog->selectedFiles().value(0) : QString();
+      dialog->deleteLater();
+      saveAsDialog_.clear();
+      updateExpiryPause();
+      if (target.isEmpty())
+        return;
+      if (QFileInfo(target).suffix().compare(QStringLiteral("png"),
+                                             Qt::CaseInsensitive) != 0) {
+        showToast(QStringLiteral("Save As only writes PNG"));
+        return;
+      }
+      runAction([path = path_, target] {
+        QString error;
+        // Owned previews are already the rendered PNG: copy its bytes rather
+        // than re-encoding. Public --pin files may be another format.
+        if (QImageReader::imageFormat(path) == "png") {
+          QFile source(path);
+          QSaveFile output(target);
+          if (!source.open(QIODevice::ReadOnly) ||
+              !output.open(QIODevice::WriteOnly) ||
+              output.write(source.readAll()) < 0 || !output.commit())
+            error = QStringLiteral("Could not save to %1").arg(target);
+        } else {
+          static_cast<void>(savePngFile(QImage(path), target, error));
+        }
+        if (error.isEmpty())
+          storeSaveAsDirectory(QFileInfo(target).absolutePath());
+        return ActionResult{error, {}, {}};
+      }, QStringLiteral("Saved to %1").arg(QFileInfo(target).fileName()));
+    });
+    dialog->open();
+  }
+
   void reopenInEditor() {
     const QString monitor = screen() ? screen()->name() : QString();
     runAction([program = QCoreApplication::applicationFilePath(), path = path_,
@@ -1468,6 +1550,9 @@ protected:
         case Qt::Key_R:
           revealFile();
           return;
+        case Qt::Key_S:
+          saveAs();
+          return;
         default:
           break;
         }
@@ -1559,6 +1644,7 @@ private:
 
   void updateExpiryPause() {
     expiry_.setPaused(closing_ || hovered_ || stackInteracting_ || actionPending_ ||
+                      saveAsDialog_ ||
                       fileDragActive_ || dragWatchTimer_.isActive() ||
                       finishRequested_ || snapPending_);
   }
@@ -1647,12 +1733,14 @@ private:
 
   [[nodiscard]] QRectF revealButtonRect() const { return controlRect(6); }
 
+  [[nodiscard]] QRectF saveAsButtonRect() const { return controlRect(7); }
+
   [[nodiscard]] QRectF controlRect(int index) const {
     return pinControlRect(size(), index);
   }
 
   [[nodiscard]] int controlRectAt(const QPointF &position) const {
-    for (int index = 0; index < 7; ++index) {
+    for (int index = 0; index < 8; ++index) {
       if (controlRect(index).contains(position))
         return index;
     }
@@ -1678,6 +1766,7 @@ private:
   QByteArray dragPng_;
   QImage dragPreview_;
   bool actionPending_ = false;
+  QPointer<QFileDialog> saveAsDialog_;
   QString path_;
   QString sharedPath_;
   PinSnapshotFile snapshotFile_;
