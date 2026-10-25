@@ -171,8 +171,9 @@ int main(int argc, char **argv) {
   configureCaptureCommandLine(parser);
   parser.process(application);
   startupTimingMark("command line parsed");
-  // The environment carries --notify to the pins and editors this starts.
-  if (parser.isSet(QStringLiteral("notify")))
+  // The environment carries --notify to the pins and editors this starts;
+  // OMASNAP_NOTIFY=0 keeps the timed preview even when a wrapper passes it.
+  if (parser.isSet(QStringLiteral("notify")) && qgetenv("OMASNAP_NOTIFY") != "0")
     qputenv("OMASNAP_NOTIFY", "1");
   // After parsing: --help and --version exit() inside process(), which skips
   // ~QApplication's wait for the theme loader thread and crashes its teardown.
